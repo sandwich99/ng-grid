@@ -449,6 +449,15 @@
            *  <br/>Defaults to true
            */
           gridOptions.groupingShowCounts = gridOptions.groupingShowCounts !== false;
+
+          /**
+           *  @ngdoc object
+           *  @name groupingNullLabel
+           *  @propertyOf  ui.grid.grouping.api:GridOptions
+           *  @description The string to use for the grouping header row label on rows which contain a null or undefined value in the grouped column.
+           *  <br/>Defaults to "Null"
+           */
+          gridOptions.groupingNullLabel = gridOptions.groupingNullLabel || 'Null';
         },
 
 
@@ -887,8 +896,8 @@
          * @param {Grid} grid grid object
          */
         tidyPriorities: function( grid ){
-          // if we're called from sortChanged, grid is in this, not passed as param
-          if ( typeof(grid) === 'undefined' && typeof(this.grid) !== 'undefined' ) {
+          // if we're called from sortChanged, grid is in this, not passed as param, the param can be a column or undefined
+          if ( ( typeof(grid) === 'undefined' || typeof(grid.grid) !== 'undefined' ) && typeof(this.grid) !== 'undefined' ) {
             grid = this.grid;
           }
           
@@ -1140,7 +1149,7 @@
           var updateProcessingState = function( groupFieldState, stateIndex ) {
             var fieldValue = grid.getCellValue(row, groupFieldState.col); 
             if ( typeof(fieldValue) === 'undefined' || fieldValue === null ){
-              return;
+              fieldValue = grid.options.groupingNullLabel;
             }
             
             if ( !row.visible ){
@@ -1287,11 +1296,14 @@
 
           // TODO: can't just use entity like this, have to use get cell value, need col for that
           var newValue = grid.getCellValue(renderableRows[rowIndex], col);
+          if ( typeof(newValue) === 'undefined' || newValue === null ) {
+            newValue = grid.options.groupingNullLabel;
+          }
           headerRow.entity[fieldName] = newValue;
           headerRow.groupLevel = stateIndex;
           headerRow.groupHeader = true;
           headerRow.internalRow = true;
-          headerRow.enableEditing = false;
+          headerRow.enableCellEdit = false;
           headerRow.enableSelection = false;
           groupingProcessingState[stateIndex].initialised = true;
           groupingProcessingState[stateIndex].currentValue = newValue;
@@ -1413,7 +1425,7 @@
           
           var groupLevel = typeof(row.groupLevel) !== 'undefined' ? row.groupLevel : groupingProcessingState.length;
           for (var i = 0; i < groupLevel; i++){
-            if ( groupingProcessingState[i].currentGroupHeader.expandedState.state === uiGridGroupingConstants.COLLAPSED ){
+            if ( groupingProcessingState[i].currentGroupHeader && groupingProcessingState[i].currentGroupHeader.expandedState.state === uiGridGroupingConstants.COLLAPSED ){
              row.visible = false;
             }
           }

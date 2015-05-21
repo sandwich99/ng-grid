@@ -271,7 +271,15 @@
          * @returns {boolean} true if an edit should start
          */
         isStartEditKey: function (evt) {
-          if (evt.keyCode === uiGridConstants.keymap.LEFT ||
+          if (evt.metaKey ||
+              evt.keyCode === uiGridConstants.keymap.ESC ||
+              evt.keyCode === uiGridConstants.keymap.SHIFT ||
+              evt.keyCode === uiGridConstants.keymap.CTRL ||
+              evt.keyCode === uiGridConstants.keymap.ALT ||
+              evt.keyCode === uiGridConstants.keymap.WIN ||
+              evt.keyCode === uiGridConstants.keymap.CAPSLOCK ||
+
+             evt.keyCode === uiGridConstants.keymap.LEFT ||
             (evt.keyCode === uiGridConstants.keymap.TAB && evt.shiftKey) ||
 
             evt.keyCode === uiGridConstants.keymap.RIGHT ||
@@ -661,12 +669,15 @@
               origCellValue = cellModel($scope);
 
               html = $scope.col.editableCellTemplate;
+
               if ($scope.col.colDef.editModelField) {
                 html = html.replace(uiGridConstants.MODEL_COL_FIELD, gridUtil.preEval('row.entity.' + $scope.col.colDef.editModelField));
               }
               else {
                 html = html.replace(uiGridConstants.MODEL_COL_FIELD, $scope.row.getQualifiedColField($scope.col));
               }
+
+              html = html.replace(uiGridConstants.COL_FIELD, 'grid.getCellValue(row, col)');
 
               var optionFilter = $scope.col.colDef.editDropdownFilter ? '|' + $scope.col.colDef.editDropdownFilter : '';
               html = html.replace(uiGridConstants.CUSTOM_FILTERS, optionFilter);
@@ -1035,7 +1046,7 @@
 
   /**
    *  @ngdoc directive
-   *  @name ui.grid.edit.directive:uiGridEditor
+   *  @name ui.grid.edit.directive:uiGridEditFileChooser
    *  @element div
    *  @restrict A
    *
