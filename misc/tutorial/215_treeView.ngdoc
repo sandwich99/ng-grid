@@ -29,6 +29,7 @@ Refer to {@link 319_complex_trees complex trees} for more detail.
 
 TreeView is still alpha, and under development, however it is included in the distribution files
 to allow people to start using it.  Notable outstandings are:
+
 - it would be nice to display an hourglass or icon whilst additional data was loading, the current
   arrangement means the grid doesn't know whether or not you're adding additional data
 
@@ -46,12 +47,13 @@ are loaded only when that row is expanded.  They have a 2 second delay to simula
 
 <example module="app">
   <file name="app.js">
-    var app = angular.module('app', ['ngAnimate', 'ngTouch', 'ui.grid', 'ui.grid.treeView', 'ui.grid.treeBase' ]);
+    var app = angular.module('app', ['ngAnimate', 'ngTouch', 'ui.grid', 'ui.grid.treeView' ]);
 
-    app.controller('MainCtrl', ['$scope', '$http', '$interval', 'uiGridTreeBaseConstants', function ($scope, $http, $interval, uiGridTreeBaseConstants ) {
+    app.controller('MainCtrl', ['$scope', '$http', '$interval', 'uiGridTreeViewConstants', function ($scope, $http, $interval, uiGridTreeViewConstants ) {
       $scope.gridOptions = {
         enableSorting: true,
         enableFiltering: true,
+        showTreeExpandNoChildren: true,
         columnDefs: [
           { name: 'name', width: '30%' },
           { name: 'gender', width: '20%' },
@@ -85,6 +87,7 @@ are loaded only when that row is expanded.  They have a 2 second delay to simula
        data[0].$$treeLevel = 0;
        data[1].$$treeLevel = 1;
        data[10].$$treeLevel = 1;
+       data[11].$$treeLevel = 1;
        data[20].$$treeLevel = 0;
        data[25].$$treeLevel = 1;
        data[50].$$treeLevel = 0;
@@ -99,6 +102,11 @@ are loaded only when that row is expanded.  They have a 2 second delay to simula
       $scope.toggleRow = function( rowNum ){
         $scope.gridApi.treeBase.toggleRowTreeState($scope.gridApi.grid.renderContainers.body.visibleRowCache[rowNum]);
       };
+
+      $scope.toggleExpandNoChildren = function(){
+        $scope.gridOptions.showTreeExpandNoChildren = !$scope.gridOptions.showTreeExpandNoChildren;
+        $scope.gridApi.grid.refresh();
+      };
     }]);
   </file>
 
@@ -107,6 +115,7 @@ are loaded only when that row is expanded.  They have a 2 second delay to simula
       <button id="expandAll" type="button" class="btn btn-success" ng-click="expandAll()">Expand All</button>
       <button id="toggleFirstRow" type="button" class="btn btn-success" ng-click="toggleRow(0)">Toggle First Row</button>
       <button id="toggleSecondRow" type="button" class="btn btn-success" ng-click="toggleRow(1)">Toggle Second Row</button>
+      <button id="toggleExpandNoChildren" type="button" class="btn btn-success" ng-click="toggleExpandNoChildren()">Toggle Expand No Children</button>
       <div id="grid1" ui-grid="gridOptions" ui-grid-tree-view class="grid"></div>
     </div>
   </file>

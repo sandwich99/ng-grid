@@ -158,6 +158,13 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
       expect( treeRows.length ).toEqual( 2, 'only level 0 is visible' );
       expect( collapseCount ).toEqual( 10 );
     });
+
+    it( 'getRowChildren', function() {
+      expect( treeRows.length ).toEqual( 2, 'only the level 0 rows are visible' );
+
+      treeRows = uiGridTreeBaseService.treeRows.call( grid, grid.rows.slice(0) );
+      expect( grid.api.treeBase.getRowChildren( grid.rows[7] ).length ).toEqual(2);
+    });
   });
 
 
@@ -165,7 +172,7 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
     it( 'tree the rows', function() {
       var treeRows = uiGridTreeBaseService.treeRows.call( grid, grid.rows.slice(0) );
       expect( treeRows.length ).toEqual( 2, 'only the level 0 rows are visible' );
-      expect( grid.treeBase.numberLevels).toEqual(2, 'two levels in the tree');
+      expect( grid.treeBase.numberLevels).toEqual(3, 'three levels in the tree');
     });
   });
 
@@ -237,7 +244,7 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
       expect( rows[0].treeNode ).toEqual( grid.treeBase.tree[0], 'treeNode is the first node in the tree' );
       delete rows[0].treeNode;
       expect( rows[0] ).toEqual( { uid: 1, treeLevel: 0, entity: { $$treeLevel: 0 }, visible: true }, 'treeLevel copied down' );
-      expect( grid.treeBase.numberLevels).toEqual(0, 'one level in the tree (is zero based like an array)');
+      expect( grid.treeBase.numberLevels).toEqual(1, 'one level in the tree');
       expect( grid.treeBase.tree.length).toEqual( 1, 'one node at root level of tree');
       expect( grid.treeBase.tree[0].row).toEqual( rows[0], 'node is for row 0');
       delete grid.treeBase.tree[0].row;
@@ -256,7 +263,7 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
       var tree = uiGridTreeBaseService.createTree( grid, rows );
 
       // overall settings
-      expect( grid.treeBase.numberLevels).toEqual(1, 'two levels in the tree (is zero based like an array)');
+      expect( grid.treeBase.numberLevels).toEqual(2, 'two levels in the tree');
 
       // rows
       expect( rows.length ).toEqual( 5, 'still only 5 rows' );
@@ -343,13 +350,13 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
 
       spyOn( grid, 'getCellValue').andCallFake( function( row, col ) { return row.entity.col3; } );
 
-      grid.columns[3].aggregation = { type: 'sum' };
+      grid.columns[3].treeAggregation = { type: 'sum' };
       grid.columns[3].uid = 'col3';
 
       var tree = uiGridTreeBaseService.createTree( grid, rows );
 
       // overall settings
-      expect( grid.treeBase.numberLevels).toEqual(1, 'two levels in the tree (is zero based like an array)');
+      expect( grid.treeBase.numberLevels).toEqual(2, 'two levels in the tree');
 
       // rows
       expect( rows.length ).toEqual( 10, 'still only 10 rows' );
@@ -681,11 +688,11 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
 
     it( 'two aggregations, one looks up label', function() {
       // treeBase has added a rowHeader column, so columns shifted right by one
-      grid.columns[2].aggregation = {
+      grid.columns[2].treeAggregation = {
         type: 'sum'
       };
 
-      grid.columns[3].aggregation = {
+      grid.columns[3].treeAggregation = {
         type: 'custom',
         label: 'custom- '
       };
@@ -742,7 +749,7 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
         aggregation.custom = numValue / 2;
       };
 
-      grid.columns[4].customAggregationFn = customAggregation;
+      grid.columns[4].customTreeAggregationFn = customAggregation;
 
       var parents = [
         { treeNode: { aggregations: [ 
@@ -807,13 +814,13 @@ describe('ui.grid.treeBase uiGridTreeBaseService', function () {
     });
 
     it( 'some aggregations', function() {
-      var fakeColumn = { uid: '123', aggregationUpdateEntity: true, customAggregationFinalizerFn: function( aggregation ){
+      var fakeColumn = { uid: '123', treeAggregationUpdateEntity: true, customTreeAggregationFinalizerFn: function( aggregation ){
         aggregation.rendered = 'custom';
       }};
 
       var fakeRow = { entity: {}, treeNode: { aggregations: [
         { value: 10, label: 'test: ', col: fakeColumn },
-        { value: 10, label: 'test: ', col: { uid: '345', aggregationUpdateEntity: true } }
+        { value: 10, label: 'test: ', col: { uid: '345', treeAggregationUpdateEntity: true } }
       ]}};
 
       uiGridTreeBaseService.finaliseAggregations( fakeRow );

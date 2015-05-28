@@ -658,9 +658,16 @@
          */
         getColumnHeaders: function (grid, colTypes) {
           var headers = [];
-          grid.columns.forEach( function( gridCol, index ) {
-            if ( (gridCol.visible || colTypes === uiGridExporterConstants.ALL ) && 
-                 gridCol.colDef.exporterSuppressExport !== true &&
+          var columns;
+
+          if ( colTypes === uiGridExporterConstants.ALL ){
+            columns = grid.columns;
+          } else {
+            columns = grid.renderContainers.body.visibleColumnCache.filter( function( column ){ return column.visible; } );
+          }
+
+          columns.forEach( function( gridCol, index ) {
+            if ( gridCol.colDef.exporterSuppressExport !== true &&
                  grid.options.exporterSuppressColumns.indexOf( gridCol.name ) === -1 ){
               headers.push({
                 name: gridCol.field,
@@ -670,11 +677,11 @@
               });
             }
           });
-          
+
           return headers;
         },
-        
-        
+
+
         /** 
          * @ngdoc property
          * @propertyOf ui.grid.exporter.api:ColumnDef
@@ -716,9 +723,9 @@
          */
         getData: function (grid, rowTypes, colTypes) {
           var data = [];
-          
           var rows;
-          
+          var columns;
+
           switch ( rowTypes ) {
             case uiGridExporterConstants.ALL:
               rows = grid.rows; 
@@ -734,12 +741,20 @@
               }
               break;
           }
-          
+
+          if ( colTypes === uiGridExporterConstants.ALL ){
+            columns = grid.columns;
+          } else {
+            columns = grid.renderContainers.body.visibleColumnCache.filter( function( column ){ return column.visible; } );
+          }
+
           rows.forEach( function( row, index ) {
 
             if (row.exporterEnableExporting !== false) {
               var extractedRow = [];
-              grid.columns.forEach( function( gridCol, index ) {
+
+
+              columns.forEach( function( gridCol, index ) {
               if ( (gridCol.visible || colTypes === uiGridExporterConstants.ALL ) && 
                    gridCol.colDef.exporterSuppressExport !== true &&
                    grid.options.exporterSuppressColumns.indexOf( gridCol.name ) === -1 ){
@@ -750,11 +765,11 @@
                   extractedRow.push(extractedField);
                 }
               });
-              
+
               data.push(extractedRow);
             }
           });
-          
+
           return data;
         },
 

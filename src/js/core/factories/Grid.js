@@ -885,26 +885,26 @@ angular.module('ui.grid')
  */
   Grid.prototype.preCompileCellTemplates = function() {
     var self = this;
-    this.columns.forEach(function (col) {
+
+    var preCompileTemplate = function( col ) {
       var html = col.cellTemplate.replace(uiGridConstants.MODEL_COL_FIELD, self.getQualifiedColField(col));
       html = html.replace(uiGridConstants.COL_FIELD, 'grid.getCellValue(row, col)');
-
-      if (col.cellTooltip === false){
-        html = html.replace(uiGridConstants.TOOLTIP, '');
-      } else {
-        // gridColumn will have made sure that the col either has false or a function for this value
-        if (col.cellFilter){
-          html = html.replace(uiGridConstants.TOOLTIP, 'title="{{col.cellTooltip(row, col) | ' + col.cellFilter + '}}"');
-        } else {
-          html = html.replace(uiGridConstants.TOOLTIP, 'title="{{col.cellTooltip(row, col)}}"');
-        }
-      }
 
       var compiledElementFn = $compile(html);
       col.compiledElementFn = compiledElementFn;
 
       if (col.compiledElementFnDefer) {
         col.compiledElementFnDefer.resolve(col.compiledElementFn);
+      }
+    };
+
+    this.columns.forEach(function (col) {
+      if ( col.cellTemplate ){
+        preCompileTemplate( col );
+      } else if ( col.cellTemplatePromise ){
+        col.cellTemplatePromise.then( function() {
+          preCompileTemplate( col );
+        });
       }
     });
   };
@@ -983,51 +983,14 @@ angular.module('ui.grid')
     //field was required in 2.x.  now name is required
     if (colDef.name === undefined && colDef.field !== undefined) {
       // See if the column name already exists:
-      var foundName = self.getColumn(colDef.field);
-
-      // If a column with this name already  exists, we will add an incrementing number to the end of the new column name
-      if (foundName) {
-        // Search through the columns for names in the format: <name><1, 2 ... N>, i.e. 'Age1, Age2, Age3',
-        var nameRE = new RegExp('^' + colDef.field + '(\\d+)$', 'i');
-
-        var foundColumns = self.columns.filter(function (column) {
-          // Test against the displayName, as that's what'll have the incremented number
-          return nameRE.test(column.displayName);
-        })
-        // Sort the found columns by the end-number
-        .sort(function (a, b) {
-          if (a === b) {
-            return 0;
-          }
-          else {
-            var numA = a.displayName.match(nameRE)[1];
-            var numB = b.displayName.match(nameRE)[1];
-
-            return parseInt(numA, 10) > parseInt(numB, 10) ? 1 : -1;
-          }
-        });
-
-        // Not columns found, so start with number "2"
-        if (foundColumns.length === 0) {
-          colDef.name = colDef.field + '2';
-        }
-        else {
-          // Get the number from the final column
-          var lastNum = foundColumns[foundColumns.length-1].displayName.match(nameRE)[1];
-
-          // Make sure to parse to an int
-          lastNum = parseInt(lastNum, 10);
-
-          // Add 1 to the number from the last column and tack it on to the field to be the name for this new column
-          colDef.name = colDef.field + (lastNum + 1);
-        }
+      var newName = colDef.field,
+        counter = 2;
+      while (self.getColumn(newName)) {
+        newName = colDef.field + counter.toString();
+        counter++;
       }
-      // ... otherwise just use the field as the column name
-      else {
-        colDef.name = colDef.field;
-      }
+      colDef.name = newName;
     }
-
   };
 
   // Return a list of items that exist in the `n` array but not the `o` array. Uses optional property accessors passed as third & fourth parameters
@@ -1837,7 +1800,7 @@ angular.module('ui.grid')
    */
   Grid.prototype.getCellValue = function getCellValue(row, col){
     if ( typeof(row.entity[ '$$' + col.uid ]) !== 'undefined' ) {
-      return row.entity[ '$$' + col.uid.rendered ];
+      return row.entity[ '$$' + col.uid].rendered;
     } else if (this.options.flatEntityAccess && typeof(col.field) !== 'undefined' ){
       return row.entity[col.field];
     } else {
@@ -2068,8 +2031,8 @@ angular.module('ui.grid')
         }
 
         if (container.header || container.headerCanvas) {
-          container.explicitHeaderHeight = null;
-          container.explicitHeaderCanvasHeight = null;
+          container.explicitHeaderHeight = container.explicitHeaderHeight || null;
+          container.explicitHeaderCanvasHeight = container.explicitHeaderCanvasHeight || null;
 
           containerHeadersToRecalc.push(container);
         }
@@ -2105,6 +2068,12 @@ angular.module('ui.grid')
         var maxHeaderHeight = 0;
         var maxHeaderCanvasHeight = 0;
         var i, container;
+        var getHeight = function(oldVal, newVal){
+          if ( oldVal !== newVal){
+            rebuildStyles = true;
+          }
+          return newVal;
+        };
         for (i = 0; i < containerHeadersToRecalc.length; i++) {
           container = containerHeadersToRecalc[i];
 
@@ -2114,12 +2083,7 @@ angular.module('ui.grid')
           }
 
           if (container.header) {
-            var oldHeaderHeight = container.headerHeight;
-            var headerHeight = container.headerHeight = parseInt(gridUtil.outerElementHeight(container.header), 10);
-
-            if (oldHeaderHeight !== headerHeight) {
-              rebuildStyles = true;
-            }
+            var headerHeight = container.headerHeight = getHeight(container.headerHeight, parseInt(gridUtil.outerElementHeight(container.header), 10));
 
             // Get the "inner" header height, that is the height minus the top and bottom borders, if present. We'll use it to make sure all the headers have a consistent height
             var topBorder = gridUtil.getBorderSize(container.header, 'top');
@@ -2138,12 +2102,8 @@ angular.module('ui.grid')
           }
 
           if (container.headerCanvas) {
-            var oldHeaderCanvasHeight = container.headerCanvasHeight;
-            var headerCanvasHeight = container.headerCanvasHeight = parseInt(gridUtil.outerElementHeight(container.headerCanvas), 10);
+            var headerCanvasHeight = container.headerCanvasHeight = getHeight(container.headerCanvasHeight, parseInt(gridUtil.outerElementHeight(container.headerCanvas), 10));
 
-            if (oldHeaderCanvasHeight !== headerCanvasHeight) {
-              rebuildStyles = true;
-            }
 
             // If the header doesn't have an explicit canvas height, save the largest header canvas height for use later
             //   Explicit header heights are based off of the max we are calculating here. We never want to base the max on something we're setting explicitly
@@ -2170,7 +2130,7 @@ angular.module('ui.grid')
             maxHeaderHeight > 0 && typeof(container.headerHeight) !== 'undefined' && container.headerHeight !== null &&
             (container.explicitHeaderHeight || container.headerHeight < maxHeaderHeight)
           ) {
-            container.explicitHeaderHeight = maxHeaderHeight;
+            container.explicitHeaderHeight = getHeight(container.explicitHeaderHeight, maxHeaderHeight);
           }
 
           // Do the same as above except for the header canvas
@@ -2178,7 +2138,7 @@ angular.module('ui.grid')
             maxHeaderCanvasHeight > 0 && typeof(container.headerCanvasHeight) !== 'undefined' && container.headerCanvasHeight !== null &&
             (container.explicitHeaderCanvasHeight || container.headerCanvasHeight < maxHeaderCanvasHeight)
           ) {
-            container.explicitHeaderCanvasHeight = maxHeaderCanvasHeight;
+            container.explicitHeaderCanvasHeight = getHeight(container.explicitHeaderCanvasHeight, maxHeaderCanvasHeight);
           }
         }
 
