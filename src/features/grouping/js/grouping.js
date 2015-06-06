@@ -77,8 +77,7 @@
       SUM: 'sum',
       MAX: 'max',
       MIN: 'min',
-      AVG: 'avg',
-      CUSTOM: 'custom'
+      AVG: 'avg'
     }
   });
 
@@ -88,8 +87,8 @@
    *
    *  @description Services for grouping features
    */
-  module.service('uiGridGroupingService', ['$q', 'uiGridGroupingConstants', 'gridUtil', 'GridRow', 'gridClassFactory', 'i18nService', 'uiGridConstants', 'uiGridTreeBaseService',
-  function ($q, uiGridGroupingConstants, gridUtil, GridRow, gridClassFactory, i18nService, uiGridConstants, uiGridTreeBaseService) {
+  module.service('uiGridGroupingService', ['$q', 'uiGridGroupingConstants', 'gridUtil', 'rowSorter', 'GridRow', 'gridClassFactory', 'i18nService', 'uiGridConstants', 'uiGridTreeBaseService',
+  function ($q, uiGridGroupingConstants, gridUtil, rowSorter, GridRow, gridClassFactory, i18nService, uiGridConstants, uiGridTreeBaseService) {
 
     var service = {
 
@@ -274,17 +273,19 @@
                * @methodOf  ui.grid.grouping.api:PublicApi
                * @description Sets the aggregation type on a column, if the 
                * column is currently grouped then it removes the grouping first.
-               * If the aggregationType is null then will result in the aggregation
+               * If the aggregationDef is null then will result in the aggregation
                * being removed
                * 
                * @param {string} columnName the column we want to aggregate
-               * @param {string} aggregationType one of the recognised types
-               * from uiGridGroupingConstants
+               * @param {string} or {function} aggregationDef one of the recognised types
+               * from uiGridGroupingConstants or a custom aggregation function.
+               * @param {string} aggregationLabel (optional) The label to use for this aggregation.
                */
-              aggregateColumn: function( columnName, aggregationType){
+              aggregateColumn: function( columnName, aggregationDef, aggregationLabel){
                 var column = grid.getColumn(columnName);
-                service.aggregateColumn( grid, column, aggregationType );
+                service.aggregateColumn( grid, column, aggregationDef, aggregationLabel);
               }
+
             }
           }
         };
@@ -320,8 +321,10 @@
          *  @ngdoc object
          *  @name groupingShowCounts
          *  @propertyOf  ui.grid.grouping.api:GridOptions
-         *  @description shows counts on the groupHeader rows
-         *  <br/>Defaults to true
+         *  @description shows counts on the groupHeader rows. Not that if you are using a cellFilter or a
+         *  sortingAlgorithm which relies on a specific format or data type, showing counts may cause that
+         *  to break, since the group header rows will always be a string with groupingShowCounts enabled.
+         *  <br/>Defaults to true except on columns of type 'date'
          */
         gridOptions.groupingShowCounts = gridOptions.groupingShowCounts !== false;
 
@@ -406,14 +409,8 @@
         if ( typeof(col.grouping) === 'undefined' && typeof(colDef.grouping) !== 'undefined') {
           col.grouping = angular.copy(colDef.grouping);
           if ( typeof(col.grouping.groupPriority) !== 'undefined' && col.grouping.groupPriority > -1 ){
-            col.treeAggregation = { type: uiGridGroupingConstants.aggregation.COUNT };
-            col.customTreeAggregationFinalizerFn = function( aggregation ){
-              if ( typeof(aggregation.groupVal) !== 'undefined') {
-                aggregation.rendered = aggregation.groupVal + ' (' + aggregation.value + ')';
-              } else {
-                aggregation.rendered = null;
-              }
-            };
+            col.treeAggregationFn = uiGridTreeBaseService.nativeAggregations()[uiGridGroupingConstants.aggregation.COUNT].aggregationFn;
+            col.treeAggregationFinalizerFn = service.groupedFinalizerFn;
           }
         } else if (typeof(col.grouping) === 'undefined'){
           col.grouping = {};
@@ -455,9 +452,7 @@
           name: 'ui.grid.grouping.aggregateRemove',
           title: i18nService.get().grouping.aggregate_remove,
           shown: function () {
-            return typeof(this.context.col.treeAggregation) !== 'undefined' && 
-                   typeof(this.context.col.treeAggregation.type) !== 'undefined' &&
-                   this.context.col.treeAggregation.type !== null;
+            return typeof(this.context.col.treeAggregationFn) !== 'undefined';
           },
           action: function () {
             service.aggregateColumn( this.context.col.grid, this.context.col, null);
@@ -465,12 +460,13 @@
         };
 
         // generic adder for the aggregation menus, which follow a pattern
-        var addAggregationMenu = function(type){
+        var addAggregationMenu = function(type, title){
+          title = title || i18nService.get().grouping['aggregate_' + type] || type;
           var menuItem = {
             name: 'ui.grid.grouping.aggregate' + type,
-            title: i18nService.get().grouping['aggregate_' + type],
+            title: title,
             shown: function () {
-              return typeof(this.context.col.treeAggregation) === 'undefined' || 
+              return typeof(this.context.col.treeAggregation) === 'undefined' ||
                      typeof(this.context.col.treeAggregation.type) === 'undefined' ||
                      this.context.col.treeAggregation.type !== type;
             },
@@ -510,17 +506,20 @@
          *  <br/>Defaults to true.
          */
         if ( col.colDef.groupingShowAggregationMenu !== false ){
-          addAggregationMenu(uiGridGroupingConstants.aggregation.COUNT);
-          addAggregationMenu(uiGridGroupingConstants.aggregation.SUM);
-          addAggregationMenu(uiGridGroupingConstants.aggregation.MAX);
-          addAggregationMenu(uiGridGroupingConstants.aggregation.MIN);
-          addAggregationMenu(uiGridGroupingConstants.aggregation.AVG);
+          angular.forEach(uiGridTreeBaseService.nativeAggregations(), function(aggregationDef, name){
+            addAggregationMenu(name);
+          });
+          angular.forEach(gridOptions.treeCustomAggregations, function(aggregationDef, name){
+            addAggregationMenu(name, aggregationDef.menuTitle);
+          });
 
           if (!gridUtil.arrayContainsObjectWithProperty(col.menuItems, 'name', 'ui.grid.grouping.aggregateRemove')) {
             col.menuItems.push(aggregateRemove);
           }
         }
       },
+
+
 
 
       /**
@@ -540,6 +539,27 @@
         return columns;
       },
 
+      /**
+       * @ngdoc function
+       * @name groupedFinalizerFn
+       * @methodOf  ui.grid.grouping.service:uiGridGroupingService
+       * @description Used on group columns to display the rendered value and optionally
+       * display the count of rows.
+       *
+       * @param {aggregation} the aggregation entity for a grouped column
+       */
+      groupedFinalizerFn: function( aggregation ){
+        var col = this;
+
+        if ( typeof(aggregation.groupVal) !== 'undefined') {
+          aggregation.rendered = aggregation.groupVal;
+          if ( col.grid.options.groupingShowCounts && col.colDef.type !== 'date' ){
+            aggregation.rendered += (' (' + aggregation.value + ')');
+          }
+        } else {
+          aggregation.rendered = null;
+        }
+      },
 
       /**
        * @ngdoc function
@@ -629,13 +649,8 @@
         service.tidyPriorities( grid );
 
         column.treeAggregation = { type: uiGridGroupingConstants.aggregation.COUNT, source: 'grouping' };
-        column.customTreeAggregationFinalizerFn = function( aggregation ){
-          if ( typeof(aggregation.groupVal) !== 'undefined') {
-            aggregation.rendered = aggregation.groupVal + ' (' + aggregation.value + ')';
-          } else {
-            aggregation.rendered = null;
-          }
-        };
+        column.treeAggregationFn = uiGridTreeBaseService.nativeAggregations()[uiGridGroupingConstants.aggregation.COUNT].aggregationFn;
+        column.treeAggregationFinalizerFn = service.groupedFinalizerFn;
 
         grid.queueGridRefresh();
       },
@@ -669,7 +684,6 @@
         grid.queueGridRefresh();
       },
 
-
       /**
        * @ngdoc function
        * @name aggregateColumn
@@ -679,25 +693,30 @@
        * 
        * @param {Grid} grid grid object
        * @param {GridCol} column the column we want to aggregate
-       * @param {string} aggregationType one of the recognised types
-       * from uiGridGroupingConstants
+       * @param {string} one of the recognised types from uiGridGroupingConstants or one of the custom aggregations from gridOptions
        */
       aggregateColumn: function( grid, column, aggregationType){
-        if (typeof(column.treeAggregation) === 'undefined') {
-          column.treeAggregation = {};
-        }
 
         if (typeof(column.grouping) !== 'undefined' && typeof(column.grouping.groupPriority) !== 'undefined' && column.grouping.groupPriority >= 0){
           service.ungroupColumn( grid, column );
         }
 
-        column.treeAggregation = { type: aggregationType };
+        var aggregationDef = {};
+        if ( typeof(grid.options.treeCustomAggregations[aggregationType]) !== 'undefined' ){
+          aggregationDef = grid.options.treeCustomAggregations[aggregationType];
+        } else if ( typeof(uiGridTreeBaseService.nativeAggregations()[aggregationType]) !== 'undefined' ){
+          aggregationDef = uiGridTreeBaseService.nativeAggregations()[aggregationType];
+        }
+
+        column.treeAggregation = { type: aggregationType, label:  i18nService.get().aggregation[aggregationDef.label] || aggregationDef.label };
+        column.treeAggregationFn = aggregationDef.aggregationFn;
+        column.treeAggregationFinalizerFn = aggregationDef.finalizerFn;
 
         grid.queueGridRefresh();
       },
 
 
-     /**
+      /**
        * @ngdoc function
        * @name setGrouping
        * @methodOf  ui.grid.grouping.service:uiGridGroupingService
@@ -725,7 +744,7 @@
           });
         }
 
-        if ( config.aggregations && config.aggregations.length && config.aggregations.length > 0 ){
+        if ( config.aggregations && config.aggregations.length ){
           config.aggregations.forEach( function( aggregation ) {
             var col = grid.getColumn(aggregation.colName);
 
@@ -741,7 +760,7 @@
       },
 
 
-     /**
+      /**
        * @ngdoc function
        * @name clearGrouping
        * @methodOf  ui.grid.grouping.service:uiGridGroupingService
@@ -823,18 +842,19 @@
       },
 
 
-     /**
+      /**
        * @ngdoc function
        * @name groupRows
        * @methodOf  ui.grid.grouping.service:uiGridGroupingService
        * @description The rowProcessor that creates the groupHeaders (i.e. does
        * the actual grouping).
        * 
-       * Assumes it is always called after the sorting processor, guaranteed by teh priority setting
+       * Assumes it is always called after the sorting processor, guaranteed by the priority setting
        * 
        * Processes all the rows in order, inserting a groupHeader row whenever there is a change
-       * in value of a grouped row.  The group header row is looked up in the groupHeaderCache, and used
-       * from there if there is one.  The entity is reset to {} if one is found.
+       * in value of a grouped row, based on the sortAlgorithm used for the column.  The group header row
+       * is looked up in the groupHeaderCache, and used from there if there is one. The entity is reset
+       * to {} if one is found.
        *
        * As it processes it maintains a `processingState` array. This records, for each level of grouping we're
        * working with, the following information:
@@ -874,7 +894,7 @@
           }
 
           // look for change of value - and insert a header
-          if ( !groupFieldState.initialised || fieldValue !== groupFieldState.currentValue ){
+          if ( !groupFieldState.initialised || rowSorter.getSortFn(grid, groupFieldState.col, renderableRows)(fieldValue, groupFieldState.currentValue) !== 0 ){
             service.insertGroupHeader( grid, renderableRows, i, processingState, stateIndex );
             i++;
           }
@@ -895,7 +915,7 @@
       },
 
 
-     /**
+      /**
        * @ngdoc function
        * @name initialiseProcessingState
        * @methodOf  ui.grid.grouping.service:uiGridGroupingService
@@ -924,7 +944,7 @@
       },
 
 
-     /**
+      /**
        * @ngdoc function
        * @name getGrouping
        * @methodOf  ui.grid.grouping.service:uiGridGroupingService
