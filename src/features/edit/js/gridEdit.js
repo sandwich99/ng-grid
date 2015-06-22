@@ -88,8 +88,10 @@
                  * </pre>
                  * @param {object} rowEntity the options.data element that was edited
                  * @param {object} colDef the column that was edited
+                 * @param {object} triggerEvent the event that triggered the edit.  Useful to prevent losing keystrokes on some
+                 *                 complex editors
                  */
-                beginCellEdit: function (rowEntity, colDef) {
+                beginCellEdit: function (rowEntity, colDef, triggerEvent) {
                 },
                 /**
                  * @ngdoc event
@@ -472,6 +474,11 @@
             var cancelTouchstartTimeout;
 
             var editCellScope;
+
+            if (!$scope.col.colDef.enableCellEdit) {
+              return;
+            }
+
             var cellNavNavigateDereg = function() {};
 
             // Bind to keydown events in the render container
@@ -563,7 +570,7 @@
 
             function beginEditKeyDown(evt) {
               if (uiGridEditService.isStartEditKey(evt)) {
-                beginEdit();
+                beginEdit(evt);
               }
             }
 
@@ -659,7 +666,7 @@
              *  </pre>
              *
              */
-            function beginEdit() {
+            function beginEdit(triggerEvent) {
               // If we are already editing, then just skip this so we don't try editing twice...
               if (inEdit) {
                 return;
@@ -755,11 +762,12 @@
                 deregOnEndCellEdit();
               });
 
-              $scope.$broadcast(uiGridEditConstants.events.BEGIN_CELL_EDIT);
-              $scope.grid.api.edit.raise.beginCellEdit($scope.row.entity, $scope.col.colDef);
+              $scope.$broadcast(uiGridEditConstants.events.BEGIN_CELL_EDIT, triggerEvent);
+              $scope.grid.api.edit.raise.beginCellEdit($scope.row.entity, $scope.col.colDef, triggerEvent);
             }
 
             function endEdit(retainFocus) {
+              $scope.grid.disableScrolling = false;
               if (!inEdit) {
                 return;
               }
@@ -774,6 +782,7 @@
             }
 
             function cancelEdit() {
+              $scope.grid.disableScrolling = false;
               if (!inEdit) {
                 return;
               }
@@ -862,9 +871,13 @@
                   $scope.deepEdit = false;
                 };
 
+
                 $elm.on('click', function (evt) {
                   if ($elm[0].type !== 'checkbox') {
                     $scope.deepEdit = true;
+                    $timeout(function () {
+                      $scope.grid.disableScrolling = true;
+                    });
                   }
                 });
 
@@ -874,35 +887,31 @@
                       evt.stopPropagation();
                       $scope.$emit(uiGridEditConstants.events.CANCEL_CELL_EDIT);
                       break;
-                    case uiGridConstants.keymap.ENTER: // Enter (Leave Field)
-                      $scope.stopEdit(evt);
-                      break;
-                    case uiGridConstants.keymap.TAB:
-                      $scope.stopEdit(evt);
-                      break;
                   }
 
-                  if ($scope.deepEdit) {
-                    switch (evt.keyCode) {
-                      case uiGridConstants.keymap.LEFT:
-                        evt.stopPropagation();
-                        break;
-                      case uiGridConstants.keymap.RIGHT:
-                        evt.stopPropagation();
-                        break;
-                      case uiGridConstants.keymap.UP:
-                        evt.stopPropagation();
-                        break;
-                      case uiGridConstants.keymap.DOWN:
-                        evt.stopPropagation();
-                        break;
-                    }
+                  if ($scope.deepEdit &&
+                    (evt.keyCode === uiGridConstants.keymap.LEFT ||
+                     evt.keyCode === uiGridConstants.keymap.RIGHT ||
+                     evt.keyCode === uiGridConstants.keymap.UP ||
+                     evt.keyCode === uiGridConstants.keymap.DOWN)) {
+                    evt.stopPropagation();
                   }
                   // Pass the keydown event off to the cellNav service, if it exists
                   else if (uiGridCtrl && uiGridCtrl.grid.api.cellNav) {
                     evt.uiGridTargetRenderContainerId = renderContainerCtrl.containerId;
                     if (uiGridCtrl.cellNav.handleKeyDown(evt) !== null) {
                       $scope.stopEdit(evt);
+                    }
+                  }
+                  else {
+                    //handle enter and tab for editing not using cellNav
+                    switch (evt.keyCode) {
+                      case uiGridConstants.keymap.ENTER: // Enter (Leave Field)
+                      case uiGridConstants.keymap.TAB:
+                        evt.stopPropagation();
+                        evt.preventDefault();
+                        $scope.stopEdit(evt);
+                        break;
                     }
                   }
 
@@ -995,13 +1004,16 @@
     ['uiGridConstants', 'uiGridEditConstants',
       function (uiGridConstants, uiGridEditConstants) {
         return {
+          require: ['?^uiGrid', '?^uiGridRenderContainer'],
           scope: true,
           compile: function () {
             return {
               pre: function ($scope, $elm, $attrs) {
 
               },
-              post: function ($scope, $elm, $attrs) {
+              post: function ($scope, $elm, $attrs, controllers) {
+                var uiGridCtrl = controllers[0];
+                var renderContainerCtrl = controllers[1];
 
                 //set focus at start of edit
                 $scope.$on(uiGridEditConstants.events.BEGIN_CELL_EDIT, function () {
@@ -1025,24 +1037,23 @@
                       evt.stopPropagation();
                       $scope.$emit(uiGridEditConstants.events.CANCEL_CELL_EDIT);
                       break;
-                    case uiGridConstants.keymap.ENTER: // Enter (Leave Field)
+                  }
+                  if (uiGridCtrl && uiGridCtrl.grid.api.cellNav) {
+                    evt.uiGridTargetRenderContainerId = renderContainerCtrl.containerId;
+                    if (uiGridCtrl.cellNav.handleKeyDown(evt) !== null) {
                       $scope.stopEdit(evt);
-                      break;
-                    case uiGridConstants.keymap.LEFT:
-                      $scope.stopEdit(evt);
-                      break;
-                    case uiGridConstants.keymap.RIGHT:
-                      $scope.stopEdit(evt);
-                      break;
-                    case uiGridConstants.keymap.UP:
-                      evt.stopPropagation();
-                      break;
-                    case uiGridConstants.keymap.DOWN:
-                      evt.stopPropagation();
-                      break;
-                    case uiGridConstants.keymap.TAB:
-                      $scope.stopEdit(evt);
-                      break;
+                    }
+                  }
+                  else {
+                    //handle enter and tab for editing not using cellNav
+                    switch (evt.keyCode) {
+                      case uiGridConstants.keymap.ENTER: // Enter (Leave Field)
+                      case uiGridConstants.keymap.TAB:
+                        evt.stopPropagation();
+                        evt.preventDefault();
+                        $scope.stopEdit(evt);
+                        break;
+                    }
                   }
                   return true;
                 });
