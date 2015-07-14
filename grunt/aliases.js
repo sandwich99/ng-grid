@@ -10,7 +10,7 @@ module.exports = function (grunt, options) {
     'default': ['before-test', 'test:single', 'after-test'],
 
     // Build with no testing
-    'build': ['ngtemplates', 'concat', 'uglify', 'fontello', 'less', 'ngdocs', 'copy'],
+    'build': ['ngtemplates', 'concat', 'uglify', 'fontello', 'less', 'ngdocs', 'copy:site'],
 
     // Auto-test tasks for development
     'autotest:unit': ['karmangular:start'],
@@ -38,7 +38,8 @@ module.exports = function (grunt, options) {
 
   if (process.env.TRAVIS){
     baseTasks['test:single'] = ['karma:travis'];
-  } else {
+  }
+  else {
     baseTasks['test:single'] = ['karmangular'];
   }
 
@@ -46,10 +47,11 @@ module.exports = function (grunt, options) {
   var semver = require('semver');
   var currentTag = semver.clean( util.getCurrentTag() );
 
-  if (currentTag){
-    baseTasks['release'] = ['clean', 'ngtemplates', 'build', 'cut-release', 'gh-pages:ui-grid-site', 'update-bower-json', 'gh-pages:bower'];
-  } else {
-    baseTasks['release'] = ['clean', 'ngtemplates', 'build', 'cut-release', 'gh-pages:ui-grid-site'];
+  if (currentTag) {
+    baseTasks['release'] = ['clean', 'ngtemplates', 'build', 'cut-release', 'copy:less_dist', 'gh-pages:ui-grid-site', 'update-bower-json', 'gh-pages:bower', 'npm-publish'];
+  }
+  else {
+    baseTasks['release'] = ['clean', 'ngtemplates', 'build', 'cut-release', 'copy:less_dist', 'gh-pages:ui-grid-site'];
   }
 
   return baseTasks;

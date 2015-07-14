@@ -157,6 +157,32 @@
         var publicApi = {
           events: {
             grouping: {
+              /**
+               * @ngdoc event
+               * @eventOf ui.grid.grouping.api:PublicApi
+               * @name aggregationChanged
+               * @description raised whenever aggregation is changed, added or removed from a column
+               *
+               * <pre>
+               *      gridApi.grouping.on.aggregationChanged(scope,function(col){})
+               * </pre>
+               * @param {gridCol} col the column which on which aggregation changed. The aggregation
+               * type is available as `col.treeAggregation.type`
+               */
+              aggregationChanged: {},
+              /**
+               * @ngdoc event
+               * @eventOf ui.grid.grouping.api:PublicApi
+               * @name groupingChanged
+               * @description raised whenever the grouped columns changes
+               *
+               * <pre>
+               *      gridApi.grouping.on.groupingChanged(scope,function(col){})
+               * </pre>
+               * @param {gridCol} col the column which on which grouping changed. The new grouping is
+               * available as `col.grouping`
+               */
+              groupingChanged: {}
             }
           },
           methods: {
@@ -589,13 +615,19 @@
 
         columns.sort(function(a, b){
           var a_group, b_group;
-          if ( typeof(a.grouping) === 'undefined' || typeof(a.grouping.groupPriority) === 'undefined' || a.grouping.groupPriority < 0){
+          if (a.isRowHeader){
+            a_group = -1000;
+          }
+          else if ( typeof(a.grouping) === 'undefined' || typeof(a.grouping.groupPriority) === 'undefined' || a.grouping.groupPriority < 0){
             a_group = null;
           } else {
             a_group = a.grouping.groupPriority;
           }
 
-          if ( typeof(b.grouping) === 'undefined' || typeof(b.grouping.groupPriority) === 'undefined' || b.grouping.groupPriority < 0){
+          if (b.isRowHeader){
+            b_group = -1000;
+          }
+          else if ( typeof(b.grouping) === 'undefined' || typeof(b.grouping.groupPriority) === 'undefined' || b.grouping.groupPriority < 0){
             b_group = null;
           } else {
             b_group = b.grouping.groupPriority;
@@ -652,6 +684,8 @@
         column.treeAggregationFn = uiGridTreeBaseService.nativeAggregations()[uiGridGroupingConstants.aggregation.COUNT].aggregationFn;
         column.treeAggregationFinalizerFn = service.groupedFinalizerFn;
 
+        grid.api.grouping.raise.groupingChanged(column);
+
         grid.queueGridRefresh();
       },
 
@@ -680,6 +714,8 @@
         delete column.customTreeAggregationFinalizer;
 
         service.tidyPriorities( grid );
+
+        grid.api.grouping.raise.groupingChanged(column);
 
         grid.queueGridRefresh();
       },
@@ -711,6 +747,8 @@
         column.treeAggregation = { type: aggregationType, label:  i18nService.get().aggregation[aggregationDef.label] || aggregationDef.label };
         column.treeAggregationFn = aggregationDef.aggregationFn;
         column.treeAggregationFinalizerFn = aggregationDef.finalizerFn;
+
+        grid.api.grouping.raise.aggregationChanged(column);
 
         grid.queueGridRefresh();
       },
